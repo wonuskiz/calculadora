@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin · Calculadora Wonuskiz Cegs</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="mascot-fallback" aria-hidden="true">🦊</div>
+
+    <div class="card">
+      <div class="card-header admin-title">🔐 Painel da GOM · Taxas da Calculadora</div>
+
+      <div class="card-body">
+
+        <!-- Estado: não logado -->
+        <div id="loginState">
+          <p class="status-line">Entre com a conta Google autorizada para ajustar as taxas.</p>
+          <div class="gsi-wrap">
+            <button id="btnLogin" class="btn-primary" style="max-width:240px;">Entrar com Google</button>
+          </div>
+        </div>
+
+        <!-- Estado: logado mas sem permissão -->
+        <div id="deniedState" style="display:none;" class="denied">
+          🚫 Esse e-mail não tem permissão para acessar o painel admin.<br>
+          Fale com quem administra a calculadora se isso for um engano.
+          <div class="gsi-wrap">
+            <button id="btnLogoutDenied" class="btn-secondary">Trocar de conta</button>
+          </div>
+        </div>
+
+        <!-- Estado: logado e autorizado -->
+        <div id="adminState" style="display:none;">
+          <p class="status-line" id="welcomeMsg"></p>
+
+          <div class="admin-section">
+            <h3>💰 Taxa da GOM</h3>
+            <div class="rate-row">
+              <select id="taxaGomTipo">
+                <option value="fixo">Fixo (R$)</option>
+                <option value="percentual">Percentual (%)</option>
+              </select>
+              <input type="number" id="taxaGomValor" inputmode="decimal" step="0.01" placeholder="0,00" />
+            </div>
+          </div>
+
+          <div class="admin-section">
+            <h3>🔁 Taxa do Proxy</h3>
+            <div class="rate-row">
+              <select id="taxaProxyTipo">
+                <option value="fixo">Fixo (R$)</option>
+                <option value="percentual">Percentual (%)</option>
+              </select>
+              <input type="number" id="taxaProxyValor" inputmode="decimal" step="0.01" placeholder="0,00" />
+            </div>
+          </div>
+
+          <div class="save-bar">
+            <button id="btnSave" class="btn-primary">Salvar taxas</button>
+            <button id="btnLogout" class="btn-secondary">Sair</button>
+          </div>
+          <div class="save-msg" id="saveMsg"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <a href="index.html" class="footer-link">← Voltar para a calculadora</a>
+
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="js/config.js"></script>
+  <script src="js/sheets-read.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
