@@ -13,10 +13,9 @@ const CONFIG = {
   // Client ID do Google OAuth (mesmo usado no wonuskiz-mail).
   GOOGLE_CLIENT_ID: "342854763708-1ht7gkhjjm61s28uhba1cecub35qkak4.apps.googleusercontent.com",
 
-  // ⚠️ PENDENTE: e-mail(s) do Google autorizados a acessar o painel admin.
-  // Adicione um ou mais e-mails na lista abaixo.
+  // E-mail(s) do Google autorizados a acessar o painel admin.
   ADMIN_EMAILS: [
-    "ALTERAR_EMAIL_DA_GOM_AQUI@gmail.com"
+    "lorranysousa7@gmail.com"
   ],
 
   // ⚠️ PENDENTE: links reais dos botões da calculadora.
