@@ -19,8 +19,11 @@ let exchangeCache = {}; // { JPY: rateToBRL, ... }
 let debounceTimer = null;
 
 function populateSelects() {
-  els.tipo.innerHTML = CONFIG.TIPOS_ITEM.map((t) => `<option value="${t}">${t}</option>`).join("");
-  els.moeda.innerHTML = CONFIG.MOEDAS.map((m) => `<option value="${m}">${m}</option>`).join("");
+  const moedaOptions = CONFIG.MOEDAS.map((m) => `<option value="${m}">${m}</option>`).join("");
+  els.moeda.innerHTML = `<option value="" disabled selected>selecione a moeda</option>${moedaOptions}`;
+
+  const tipoOptions = CONFIG.TIPOS_ITEM.map((t) => `<option value="${t}">${t}</option>`).join("");
+  els.tipo.innerHTML = `<option value="" disabled selected>selecione o tipo de item</option>${tipoOptions}`;
 }
 
 function setupLinks() {
@@ -44,10 +47,10 @@ async function getExchangeRate(moeda) {
   if (exchangeCache[moeda] !== undefined) return exchangeCache[moeda];
   const url = `https://api.frankfurter.dev/v1/latest?base=${moeda}&symbols=BRL`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Não foi possível buscar a cotação agora.");
+  if (!res.ok) throw new Error("Não conseguimos buscar a cotação agora. Tente novamente em instantes.");
   const data = await res.json();
   const rate = data?.rates?.BRL;
-  if (!rate) throw new Error("Cotação indisponível para essa moeda.");
+  if (!rate) throw new Error("Cotação indisponível para essa moeda no momento.");
   exchangeCache[moeda] = rate;
   return rate;
 }
@@ -58,20 +61,34 @@ function applyTaxa(baseValue, taxa) {
   return taxa.valor;
 }
 
+function setEmptyState() {
+  els.totalBox.classList.remove("filled");
+  els.totalValue.textContent = "preencha os campos acima";
+}
+
+function setLoadingState() {
+  els.totalBox.classList.remove("filled");
+  els.totalValue.textContent = "calculando...";
+}
+
+function setFilledState(total) {
+  els.totalBox.classList.add("filled");
+  els.totalValue.textContent = formatBRL(total);
+}
+
 async function recalculate() {
   hideError();
 
-  const valor = parseFloat((els.valor.value || "0").replace(",", "."));
-  const quantidade = parseFloat((els.quantidade.value || "0").replace(",", "."));
+  const valor = parseFloat((els.valor.value || "").replace(",", "."));
+  const quantidade = parseFloat(els.quantidade.value || "1") || 1;
   const moeda = els.moeda.value;
 
-  if (!valor || valor <= 0 || !quantidade || quantidade <= 0) {
-    els.totalBox.classList.add("loading");
-    els.totalValue.textContent = formatBRL(0);
+  if (!valor || valor <= 0 || !moeda) {
+    setEmptyState();
     return;
   }
 
-  els.totalBox.classList.add("loading");
+  setLoadingState();
 
   try {
     const rate = await getExchangeRate(moeda);
@@ -82,12 +99,10 @@ async function recalculate() {
 
     const total = valorConvertido + taxaGom + taxaProxy;
 
-    els.totalValue.textContent = formatBRL(total);
+    setFilledState(total);
   } catch (err) {
     showError(err.message || "Não foi possível calcular agora. Tente novamente.");
-    els.totalValue.textContent = "—";
-  } finally {
-    els.totalBox.classList.remove("loading");
+    setEmptyState();
   }
 }
 
