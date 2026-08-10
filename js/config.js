@@ -19,9 +19,9 @@ const CONFIG = {
     "luudyta@gmail.com"
   ],
 
-  // ⚠️ PENDENTE: links reais dos botões da calculadora.
-  FORM_PEDIDOS_URL: "https://forms.gle/ALTERAR_LINK_AQUI",
-  PLANILHA_ACOMPANHAMENTO_URL: "https://docs.google.com/spreadsheets/d/ALTERAR_LINK_AQUI",
+  // Links dos botões da calculadora.
+  FORM_PEDIDOS_URL: "https://forms.gle/ZEbyAunroEZndCjH8",
+  PLANILHA_ACOMPANHAMENTO_URL: "https://docs.google.com/spreadsheets/d/1o1IbiynuDy9vJlI3MifN0PkU0kcprM0jT-6VrGfeAsc/edit?gid=1768893326#gid=1768893326",
 
   // Tipos de item disponíveis (igual à planilha original).
   TIPOS_ITEM: ["Photocard", "Album", "Skzoo", "Chaveiro"],
