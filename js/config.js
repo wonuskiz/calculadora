@@ -15,7 +15,8 @@ const CONFIG = {
 
   // E-mail(s) do Google autorizados a acessar o painel admin.
   ADMIN_EMAILS: [
-    "lorranysousa7@gmail.com"
+    "lorranysousa7@gmail.com",
+    "luudyta@gmail.com"
   ],
 
   // ⚠️ PENDENTE: links reais dos botões da calculadora.
