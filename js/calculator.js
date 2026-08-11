@@ -14,7 +14,8 @@ const els = {
   planilhaAcompanhamento: document.getElementById("planilhaAcompanhamento"),
 };
 
-let ratesConfig = null; // { JPY: {taxa_gom, taxa_proxy}, KRW: {...}, ... }
+let proxyConfig = null; // { JPY: {limite, baixoTipo, baixoValor, altoTipo, altoValor}, ... }
+let gomConfig = null; // { Photocard: {faixas: [...]}, Album: {valor}, ... }
 let exchangeCache = {}; // { JPY: rateToBRL, ... }
 let debounceTimer = null;
 
@@ -55,10 +56,33 @@ async function getExchangeRate(moeda) {
   return rate;
 }
 
-function applyTaxa(baseValue, taxa) {
-  if (!taxa) return 0;
-  if (taxa.tipo === "percentual") return baseValue * (taxa.valor / 100);
-  return taxa.valor;
+/** Calcula a taxa de proxy (na moeda original) com base no valor total do pedido. */
+function calcTaxaProxyOriginal(totalOriginal, moeda) {
+  const cfg = proxyConfig?.[moeda];
+  if (!cfg) return 0;
+
+  const usaFaixaAlta = cfg.limite !== null && cfg.limite !== undefined && totalOriginal > cfg.limite;
+  const tipo = usaFaixaAlta ? cfg.altoTipo : cfg.baixoTipo;
+  const valor = usaFaixaAlta ? cfg.altoValor : cfg.baixoValor;
+
+  if (tipo === "percentual") return totalOriginal * (valor / 100);
+  return valor;
+}
+
+/** Calcula a taxa da GOM (em reais), por item, multiplicada pela quantidade. */
+function calcTaxaGomBRL(tipoItem, quantidade) {
+  const cfg = gomConfig?.[tipoItem];
+  if (!cfg) return 0;
+
+  let valorPorItem = 0;
+  if (tipoItem === "Photocard" && cfg.faixas) {
+    const faixa = cfg.faixas.find((f) => quantidade >= f.min && quantidade <= f.max);
+    valorPorItem = faixa ? faixa.valor : 0;
+  } else {
+    valorPorItem = cfg.valor || 0;
+  }
+
+  return valorPorItem * quantidade;
 }
 
 function setEmptyState() {
@@ -82,8 +106,9 @@ async function recalculate() {
   const valor = parseFloat((els.valor.value || "").replace(",", "."));
   const quantidade = parseFloat(els.quantidade.value || "1") || 1;
   const moeda = els.moeda.value;
+  const tipoItem = els.tipo.value;
 
-  if (!valor || valor <= 0 || !moeda) {
+  if (!valor || valor <= 0 || !moeda || !tipoItem) {
     setEmptyState();
     return;
   }
@@ -92,13 +117,14 @@ async function recalculate() {
 
   try {
     const rate = await getExchangeRate(moeda);
-    const valorConvertido = valor * quantidade * rate;
 
-    const taxasDaMoeda = ratesConfig?.[moeda];
-    const taxaGom = applyTaxa(valorConvertido, taxasDaMoeda?.taxa_gom);
-    const taxaProxy = applyTaxa(valorConvertido, taxasDaMoeda?.taxa_proxy);
+    const totalOriginal = valor * quantidade;
+    const taxaProxyOriginal = calcTaxaProxyOriginal(totalOriginal, moeda);
+    const valorConvertidoBRL = (totalOriginal + taxaProxyOriginal) * rate;
 
-    const total = valorConvertido + taxaGom + taxaProxy;
+    const taxaGomBRL = calcTaxaGomBRL(tipoItem, quantidade);
+
+    const total = valorConvertidoBRL + taxaGomBRL;
 
     setFilledState(total);
   } catch (err) {
@@ -119,7 +145,7 @@ async function init() {
   [els.valor, els.quantidade].forEach((el) => el.addEventListener("input", debouncedRecalculate));
   [els.tipo, els.moeda].forEach((el) => el.addEventListener("change", debouncedRecalculate));
 
-  ratesConfig = await fetchRatesConfig();
+  [proxyConfig, gomConfig] = await Promise.all([fetchProxyConfig(), fetchGomConfig()]);
   recalculate();
 }
 
