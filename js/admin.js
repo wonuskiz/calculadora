@@ -1,12 +1,13 @@
 // ============================================================
 // Painel Admin — Wonuskiz Cegs
-// Login Google (OAuth 2.0) + leitura/gravação das taxas
-// POR MOEDA na aba "Config" da planilha, via Google Sheets API.
+// Login Google (OAuth 2.0) + leitura/gravação das taxas de
+// Proxy (por moeda) e GOM (por tipo de item), via Sheets API.
 // ============================================================
 
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email";
 
 const FLAGS = { JPY: "🇯🇵", KRW: "🇰🇷", CNY: "🇨🇳", USD: "🇺🇸" };
+const GOM_ICONS = { Photocard: "🃏", Album: "💿", Skzoo: "🦝", Chaveiro: "🔑" };
 
 const adminEls = {
   loginState: document.getElementById("loginState"),
@@ -18,13 +19,16 @@ const adminEls = {
   btnSave: document.getElementById("btnSave"),
   welcomeMsg: document.getElementById("welcomeMsg"),
   saveMsg: document.getElementById("saveMsg"),
-  accordionList: document.getElementById("accordionList"),
+  accordionProxy: document.getElementById("accordionProxy"),
+  accordionGom: document.getElementById("accordionGom"),
 };
 
 let accessToken = null;
 let tokenClient = null;
-let openCurrency = CONFIG.MOEDAS[0]; // primeira moeda começa aberta
-let currentRates = {}; // estado local editável { JPY: {taxa_gom, taxa_proxy}, ... }
+let openProxyCurrency = CONFIG.MOEDAS[0];
+let openGomTipo = CONFIG.TIPOS_ITEM[0];
+let proxyState = {}; // { JPY: {limite, baixoTipo, baixoValor, altoTipo, altoValor}, ... }
+let gomState = {}; // { Photocard: {faixas: [...]}, Album: {valor}, ... }
 
 function showState(state) {
   adminEls.loginState.style.display = state === "login" ? "block" : "none";
@@ -41,10 +45,13 @@ async function getUserEmail(token) {
   return data.email;
 }
 
-/** Constrói o HTML de um item do accordion para uma moeda. */
-function renderAccordionItem(moeda) {
-  const isOpen = moeda === openCurrency;
-  const rates = currentRates[moeda];
+// ------------------------------------------------------------
+// PROXY (por moeda)
+// ------------------------------------------------------------
+
+function renderProxyItem(moeda) {
+  const isOpen = moeda === openProxyCurrency;
+  const cfg = proxyState[moeda];
 
   const item = document.createElement("div");
   item.className = "accordion-item" + (isOpen ? " open" : "");
@@ -58,8 +65,8 @@ function renderAccordionItem(moeda) {
     <i class="ti ti-chevron-down chevron" aria-hidden="true"></i>
   `;
   header.addEventListener("click", () => {
-    openCurrency = isOpen ? null : moeda;
-    renderAccordion();
+    openProxyCurrency = isOpen ? null : moeda;
+    renderProxyAccordion();
   });
   item.appendChild(header);
 
@@ -67,58 +74,160 @@ function renderAccordionItem(moeda) {
     const body = document.createElement("div");
     body.className = "accordion-body";
     body.innerHTML = `
-      <div class="mini-label">taxa da gom</div>
-      <div class="rate-row">
-        <select data-moeda="${moeda}" data-campo="gom-tipo">
-          <option value="fixo" ${rates.taxa_gom.tipo === "fixo" ? "selected" : ""}>fixo (r$)</option>
-          <option value="percentual" ${rates.taxa_gom.tipo === "percentual" ? "selected" : ""}>percentual (%)</option>
-        </select>
-        <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" data-moeda="${moeda}" data-campo="gom-valor" value="${rates.taxa_gom.valor || ""}" />
+      <div class="mini-label">limite (${moeda}) — deixe vazio se não houver faixa</div>
+      <div class="rate-row" style="margin-bottom:12px;">
+        <input type="number" inputmode="decimal" step="0.01" placeholder="ex: 6000" data-moeda="${moeda}" data-campo="limite" value="${cfg.limite ?? ""}" style="grid-column: span 2;" />
       </div>
-      <div class="mini-label">taxa do proxy</div>
+
+      <div class="mini-label">taxa até o limite</div>
       <div class="rate-row">
-        <select data-moeda="${moeda}" data-campo="proxy-tipo">
-          <option value="fixo" ${rates.taxa_proxy.tipo === "fixo" ? "selected" : ""}>fixo (r$)</option>
-          <option value="percentual" ${rates.taxa_proxy.tipo === "percentual" ? "selected" : ""}>percentual (%)</option>
+        <select data-moeda="${moeda}" data-campo="baixoTipo">
+          <option value="fixo" ${cfg.baixoTipo === "fixo" ? "selected" : ""}>fixo (${moeda})</option>
+          <option value="percentual" ${cfg.baixoTipo === "percentual" ? "selected" : ""}>percentual (%)</option>
         </select>
-        <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" data-moeda="${moeda}" data-campo="proxy-valor" value="${rates.taxa_proxy.valor || ""}" />
+        <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" data-moeda="${moeda}" data-campo="baixoValor" value="${cfg.baixoValor ?? ""}" />
+      </div>
+
+      <div class="mini-label">taxa acima do limite</div>
+      <div class="rate-row">
+        <select data-moeda="${moeda}" data-campo="altoTipo">
+          <option value="fixo" ${cfg.altoTipo === "fixo" ? "selected" : ""}>fixo (${moeda})</option>
+          <option value="percentual" ${cfg.altoTipo === "percentual" ? "selected" : ""}>percentual (%)</option>
+        </select>
+        <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" data-moeda="${moeda}" data-campo="altoValor" value="${cfg.altoValor ?? ""}" />
       </div>
     `;
     item.appendChild(body);
 
-    // Salva no estado local a cada alteração (sem persistir ainda — só ao clicar em "salvar").
     body.querySelectorAll("select, input").forEach((el) => {
-      el.addEventListener("input", syncFieldToState);
-      el.addEventListener("change", syncFieldToState);
+      el.addEventListener("input", syncProxyFieldToState);
+      el.addEventListener("change", syncProxyFieldToState);
     });
   }
 
   return item;
 }
 
-function syncFieldToState(e) {
+function syncProxyFieldToState(e) {
   const el = e.target;
   const moeda = el.dataset.moeda;
   const campo = el.dataset.campo;
   if (!moeda || !campo) return;
 
-  if (campo === "gom-tipo") currentRates[moeda].taxa_gom.tipo = el.value;
-  if (campo === "gom-valor") currentRates[moeda].taxa_gom.valor = parseFloat(el.value) || 0;
-  if (campo === "proxy-tipo") currentRates[moeda].taxa_proxy.tipo = el.value;
-  if (campo === "proxy-valor") currentRates[moeda].taxa_proxy.valor = parseFloat(el.value) || 0;
+  if (campo === "limite") {
+    proxyState[moeda].limite = el.value === "" ? null : parseFloat(el.value);
+  } else if (campo.endsWith("Tipo")) {
+    proxyState[moeda][campo] = el.value;
+  } else {
+    proxyState[moeda][campo] = parseFloat(el.value) || 0;
+  }
 }
 
-function renderAccordion() {
-  adminEls.accordionList.innerHTML = "";
+function renderProxyAccordion() {
+  adminEls.accordionProxy.innerHTML = "";
   CONFIG.MOEDAS.forEach((moeda) => {
-    adminEls.accordionList.appendChild(renderAccordionItem(moeda));
+    adminEls.accordionProxy.appendChild(renderProxyItem(moeda));
   });
 }
 
-async function loadCurrentRates() {
-  currentRates = await fetchRatesConfig();
-  renderAccordion();
+// ------------------------------------------------------------
+// GOM (por tipo de item)
+// ------------------------------------------------------------
+
+function renderGomItem(tipo) {
+  const isOpen = tipo === openGomTipo;
+  const cfg = gomState[tipo];
+
+  const item = document.createElement("div");
+  item.className = "accordion-item" + (isOpen ? " open" : "");
+
+  const header = document.createElement("button");
+  header.type = "button";
+  header.className = "accordion-header";
+  header.innerHTML = `
+    <span class="flag">${GOM_ICONS[tipo] || ""}</span>
+    <span class="code">${tipo}</span>
+    <i class="ti ti-chevron-down chevron" aria-hidden="true"></i>
+  `;
+  header.addEventListener("click", () => {
+    openGomTipo = isOpen ? null : tipo;
+    renderGomAccordion();
+  });
+  item.appendChild(header);
+
+  if (isOpen) {
+    const body = document.createElement("div");
+    body.className = "accordion-body";
+
+    if (tipo === "Photocard") {
+      body.innerHTML = `<div class="mini-label">valor por item (r$), conforme a quantidade</div>`;
+      cfg.faixas.forEach((faixa, idx) => {
+        const label = faixa.max === Infinity ? `${faixa.min}+ un` : `${faixa.min} a ${faixa.max} un`;
+        const row = document.createElement("div");
+        row.className = "rate-row";
+        row.style.marginBottom = "8px";
+        row.style.gridTemplateColumns = "1fr 1fr";
+        row.innerHTML = `
+          <span style="font-size:12px; display:flex; align-items:center; color:var(--lbl);">${label}</span>
+          <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" data-tipo="${tipo}" data-faixa="${idx}" value="${faixa.valor ?? ""}" />
+        `;
+        body.appendChild(row);
+      });
+    } else {
+      body.innerHTML = `
+        <div class="mini-label">valor por item (r$)</div>
+        <div class="rate-row" style="grid-template-columns: 1fr;">
+          <input type="number" inputmode="decimal" step="0.01" placeholder="0,00" data-tipo="${tipo}" value="${cfg.valor ?? ""}" />
+        </div>
+      `;
+    }
+
+    item.appendChild(body);
+
+    body.querySelectorAll("input").forEach((el) => {
+      el.addEventListener("input", syncGomFieldToState);
+      el.addEventListener("change", syncGomFieldToState);
+    });
+  }
+
+  return item;
 }
+
+function syncGomFieldToState(e) {
+  const el = e.target;
+  const tipo = el.dataset.tipo;
+  if (!tipo) return;
+
+  if (tipo === "Photocard" && el.dataset.faixa !== undefined) {
+    const idx = parseInt(el.dataset.faixa, 10);
+    gomState.Photocard.faixas[idx].valor = parseFloat(el.value) || 0;
+  } else {
+    gomState[tipo].valor = parseFloat(el.value) || 0;
+  }
+}
+
+function renderGomAccordion() {
+  adminEls.accordionGom.innerHTML = "";
+  CONFIG.TIPOS_ITEM.forEach((tipo) => {
+    adminEls.accordionGom.appendChild(renderGomItem(tipo));
+  });
+}
+
+// ------------------------------------------------------------
+// Carregamento inicial
+// ------------------------------------------------------------
+
+async function loadCurrentConfig() {
+  const [proxy, gom] = await Promise.all([fetchProxyConfig(), fetchGomConfig()]);
+  proxyState = proxy;
+  gomState = gom;
+  renderProxyAccordion();
+  renderGomAccordion();
+}
+
+// ------------------------------------------------------------
+// Login / Auth
+// ------------------------------------------------------------
 
 async function handleTokenResponse(tokenResponse) {
   if (tokenResponse.error) {
@@ -138,7 +247,7 @@ async function handleTokenResponse(tokenResponse) {
 
     adminEls.welcomeMsg.textContent = `conectada como ${email}`;
     showState("admin");
-    await loadCurrentRates();
+    await loadCurrentConfig();
   } catch (err) {
     alert("Erro ao entrar: " + err.message);
     showState("login");
@@ -165,14 +274,17 @@ function logout() {
   showState("login");
 }
 
-/** Garante que a aba "Config" exista na planilha; cria se necessário. */
-async function ensureConfigSheetExists() {
+// ------------------------------------------------------------
+// Gravação
+// ------------------------------------------------------------
+
+async function ensureSheetExists(sheetName) {
   const metaRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}?fields=sheets.properties.title`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const meta = await metaRes.json();
-  const exists = (meta.sheets || []).some((s) => s.properties.title === CONFIG.CONFIG_SHEET_NAME);
+  const exists = (meta.sheets || []).some((s) => s.properties.title === sheetName);
   if (exists) return;
 
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
@@ -182,43 +294,58 @@ async function ensureConfigSheetExists() {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      requests: [{ addSheet: { properties: { title: CONFIG.CONFIG_SHEET_NAME } } }],
+      requests: [{ addSheet: { properties: { title: sheetName } } }],
     }),
   });
 }
 
-async function saveRates() {
+async function writeValues(sheetName, range, values) {
+  await ensureSheetExists(sheetName);
+  const fullRange = `${sheetName}!${range}`;
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(fullRange)}?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ range: fullRange, majorDimension: "ROWS", values }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Falha ao salvar em ${sheetName}.`);
+  }
+}
+
+async function saveAll() {
   adminEls.btnSave.disabled = true;
   adminEls.saveMsg.textContent = "salvando...";
   adminEls.saveMsg.className = "save-msg";
 
-  const values = [["moeda", "taxa_gom_tipo", "taxa_gom_valor", "taxa_proxy_tipo", "taxa_proxy_valor"]];
-  CONFIG.MOEDAS.forEach((moeda) => {
-    const r = currentRates[moeda];
-    values.push([moeda, r.taxa_gom.tipo, r.taxa_gom.valor || 0, r.taxa_proxy.tipo, r.taxa_proxy.valor || 0]);
-  });
-
   try {
-    await ensureConfigSheetExists();
+    // --- Proxy ---
+    const proxyValues = [["moeda", "limite", "baixo_tipo", "baixo_valor", "alto_tipo", "alto_valor"]];
+    CONFIG.MOEDAS.forEach((moeda) => {
+      const c = proxyState[moeda];
+      proxyValues.push([moeda, c.limite ?? "", c.baixoTipo, c.baixoValor || 0, c.altoTipo, c.altoValor || 0]);
+    });
+    await writeValues(CONFIG.CONFIG_PROXY_SHEET, `A1:F${proxyValues.length}`, proxyValues);
 
-    const lastRow = values.length; // header + 1 linha por moeda
-    const range = `${CONFIG.CONFIG_SHEET_NAME}!A1:E${lastRow}`;
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ range, majorDimension: "ROWS", values }),
+    // --- Gom ---
+    const gomValues = [["tipo_item", "qtd_min", "qtd_max", "valor"]];
+    CONFIG.TIPOS_ITEM.forEach((tipo) => {
+      const c = gomState[tipo];
+      if (tipo === "Photocard") {
+        c.faixas.forEach((f) => {
+          gomValues.push([tipo, f.min, f.max === Infinity ? "" : f.max, f.valor || 0]);
+        });
+      } else {
+        gomValues.push([tipo, 1, "", c.valor || 0]);
       }
-    );
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error?.message || "Falha ao salvar.");
-    }
+    });
+    await writeValues(CONFIG.CONFIG_GOM_SHEET, `A1:D${gomValues.length}`, gomValues);
 
     adminEls.saveMsg.textContent = "✅ taxas salvas com sucesso!";
     adminEls.saveMsg.className = "save-msg ok";
@@ -238,4 +365,4 @@ window.addEventListener("load", () => {
 adminEls.btnLogin.addEventListener("click", login);
 adminEls.btnLogout.addEventListener("click", logout);
 adminEls.btnLogoutDenied.addEventListener("click", logout);
-adminEls.btnSave.addEventListener("click", saveRates);
+adminEls.btnSave.addEventListener("click", saveAll);
