@@ -3,6 +3,12 @@
 // Usa a exportação CSV da aba "Config" da planilha do Google Sheets.
 // Isso só funciona se a planilha estiver com o acesso "Qualquer
 // pessoa com o link pode ver" (mesmo nível que já é usado hoje).
+//
+// Estrutura da aba "Config" (uma linha por moeda):
+// moeda | taxa_gom_tipo | taxa_gom_valor | taxa_proxy_tipo | taxa_proxy_valor
+// JPY   | fixo          | 0              | fixo            | 0
+// KRW   | fixo          | 0              | fixo            | 0
+// ...
 // ============================================================
 
 /**
@@ -28,16 +34,22 @@ function parseCsvLine(line) {
   return result;
 }
 
-/**
- * Busca as taxas configuradas (taxa_gom, taxa_proxy) na aba "Config".
- * Retorna valores padrão (0, fixo) caso a aba ainda não exista ou
- * a leitura falhe, para a calculadora nunca quebrar por causa disso.
- */
-async function fetchRatesConfig() {
-  const defaults = {
+function defaultRateEntry() {
+  return {
     taxa_gom: { tipo: "fixo", valor: 0 },
     taxa_proxy: { tipo: "fixo", valor: 0 },
   };
+}
+
+/**
+ * Busca as taxas configuradas por moeda na aba "Config".
+ * Retorna um objeto { JPY: {taxa_gom, taxa_proxy}, KRW: {...}, ... }
+ * com valores padrão (0, fixo) para qualquer moeda ainda não configurada,
+ * para a calculadora nunca quebrar por causa disso.
+ */
+async function fetchRatesConfig() {
+  const defaults = {};
+  CONFIG.MOEDAS.forEach((m) => { defaults[m] = defaultRateEntry(); });
 
   const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CONFIG.CONFIG_SHEET_NAME)}`;
 
@@ -53,18 +65,24 @@ async function fetchRatesConfig() {
     const rates = { ...defaults };
 
     for (const line of lines) {
-      const [chave, tipo, valor] = parseCsvLine(line);
-      const key = (chave || "").trim().toLowerCase();
-      if (key === "taxa_gom" || key === "taxa_proxy") {
-        rates[key] = {
-          tipo: (tipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
-          valor: parseFloat((valor || "0").replace(",", ".")) || 0,
-        };
-      }
+      const [moeda, gomTipo, gomValor, proxyTipo, proxyValor] = parseCsvLine(line);
+      const key = (moeda || "").trim().toUpperCase();
+      if (!CONFIG.MOEDAS.includes(key)) continue; // pula o cabeçalho e linhas inválidas
+
+      rates[key] = {
+        taxa_gom: {
+          tipo: (gomTipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
+          valor: parseFloat((gomValor || "0").replace(",", ".")) || 0,
+        },
+        taxa_proxy: {
+          tipo: (proxyTipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
+          valor: parseFloat((proxyValor || "0").replace(",", ".")) || 0,
+        },
+      };
     }
     return rates;
   } catch (err) {
-    console.warn("[calculadora] Usando taxas padrão (0):", err.message);
+    console.warn("[calculadora] Usando taxas padrão (0) para todas as moedas:", err.message);
     return defaults;
   }
 }
