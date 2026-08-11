@@ -20,7 +20,7 @@
       <div class="card-header">
         <div class="eyebrow">Wonuskiz Cegs · admin</div>
         <div class="title">Painel da gom</div>
-        <div class="subtitle">Ajuste as taxas usadas no cálculo da cotação pública.</div>
+        <div class="subtitle">Cada moeda tem sua própria taxa de gom e de proxy.</div>
       </div>
 
       <!-- Estado: não logada -->
@@ -57,36 +57,14 @@
 
         <div class="card-body">
 
-          <div class="admin-section">
-            <div class="section-label"><i class="ti ti-coin" aria-hidden="true"></i> taxa da gom</div>
-            <div class="rate-row">
-              <select id="taxaGomTipo">
-                <option value="fixo">fixo (r$)</option>
-                <option value="percentual">percentual (%)</option>
-              </select>
-              <input type="number" id="taxaGomValor" inputmode="decimal" step="0.01" placeholder="0,00" />
-            </div>
-            <div class="help-text">cobrada em cima do valor convertido</div>
-          </div>
-
-          <div class="admin-section">
-            <div class="section-label"><i class="ti ti-refresh" aria-hidden="true"></i> taxa do proxy</div>
-            <div class="rate-row">
-              <select id="taxaProxyTipo">
-                <option value="fixo">fixo (r$)</option>
-                <option value="percentual">percentual (%)</option>
-              </select>
-              <input type="number" id="taxaProxyValor" inputmode="decimal" step="0.01" placeholder="0,00" />
-            </div>
-            <div class="help-text">cobrada em cima do valor convertido</div>
-          </div>
+          <div id="accordionList" class="accordion-list"></div>
 
           <div class="preview-note">
             <i class="ti ti-eye" aria-hidden="true"></i>
             <span>essas taxas ficam ocultas para quem usa a calculadora — só o valor final aparece.</span>
           </div>
 
-          <button id="btnSave" class="btn-primary">salvar taxas</button>
+          <button id="btnSave" class="btn-primary">salvar todas as taxas</button>
           <div class="save-msg" id="saveMsg"></div>
 
           <button id="btnLogout" class="btn-text">
