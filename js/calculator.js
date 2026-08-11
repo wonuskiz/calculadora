@@ -14,7 +14,7 @@ const els = {
   planilhaAcompanhamento: document.getElementById("planilhaAcompanhamento"),
 };
 
-let ratesConfig = null; // { taxa_gom: {tipo, valor}, taxa_proxy: {tipo, valor} }
+let ratesConfig = null; // { JPY: {taxa_gom, taxa_proxy}, KRW: {...}, ... }
 let exchangeCache = {}; // { JPY: rateToBRL, ... }
 let debounceTimer = null;
 
@@ -94,8 +94,9 @@ async function recalculate() {
     const rate = await getExchangeRate(moeda);
     const valorConvertido = valor * quantidade * rate;
 
-    const taxaGom = applyTaxa(valorConvertido, ratesConfig?.taxa_gom);
-    const taxaProxy = applyTaxa(valorConvertido, ratesConfig?.taxa_proxy);
+    const taxasDaMoeda = ratesConfig?.[moeda];
+    const taxaGom = applyTaxa(valorConvertido, taxasDaMoeda?.taxa_gom);
+    const taxaProxy = applyTaxa(valorConvertido, taxasDaMoeda?.taxa_proxy);
 
     const total = valorConvertido + taxaGom + taxaProxy;
 
