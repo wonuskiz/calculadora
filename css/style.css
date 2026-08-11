@@ -211,6 +211,10 @@ body {
   animation: scrollTicker 16s linear infinite;
 }
 .ticker-track span { padding: 0 20px; }
+.ticker-track .ticker-item,
+.ticker-track .ticker-star { padding: 0; }
+.ticker-track .ticker-item { margin-right: 10px; }
+.ticker-track .ticker-star { margin-right: 10px; opacity: 0.75; }
 @keyframes scrollTicker {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
