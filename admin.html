@@ -20,7 +20,7 @@
       <div class="card-header">
         <div class="eyebrow">Wonuskiz Cegs · admin</div>
         <div class="title">Painel da gom</div>
-        <div class="subtitle">Cada moeda tem sua própria taxa de gom e de proxy.</div>
+        <div class="subtitle">Proxy varia por moeda e valor do pedido. GOM varia por tipo de item.</div>
       </div>
 
       <!-- Estado: não logada -->
@@ -57,7 +57,11 @@
 
         <div class="card-body">
 
-          <div id="accordionList" class="accordion-list"></div>
+          <div class="section-title"><i class="ti ti-refresh" aria-hidden="true"></i> taxa do proxy — por moeda</div>
+          <div id="accordionProxy" class="accordion-list"></div>
+
+          <div class="section-title"><i class="ti ti-coin" aria-hidden="true"></i> taxa da gom — por tipo de item</div>
+          <div id="accordionGom" class="accordion-list"></div>
 
           <div class="preview-note">
             <i class="ti ti-eye" aria-hidden="true"></i>
