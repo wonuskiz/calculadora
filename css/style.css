@@ -394,6 +394,67 @@ body {
 
 .admin-section { margin-bottom: 22px; }
 
+/* ---------- Accordion de moedas (admin) ---------- */
+.accordion-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+
+.accordion-item {
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--field-bg);
+  border: var(--field-border);
+}
+
+.accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+.accordion-header .flag { font-size: 16px; }
+.accordion-header .code {
+  font-size: 13px;
+  font-weight: 700;
+  flex: 1;
+  text-align: left;
+  color: var(--lbl);
+}
+.accordion-header .chevron {
+  font-size: 15px;
+  color: var(--lbl);
+  transition: transform 0.2s ease;
+}
+.accordion-item.open .chevron { transform: rotate(180deg); }
+
+.accordion-body { padding: 0 14px 14px; }
+
+.accordion-body .mini-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  color: var(--purple-dark);
+}
+[data-theme="dark"] .accordion-body .mini-label { color: var(--eyebrow); }
+
+.accordion-body .rate-row { margin-bottom: 12px; }
+.accordion-body .rate-row:last-child { margin-bottom: 0; }
+.accordion-body select,
+.accordion-body input {
+  border-radius: 8px;
+  padding: 10px 10px;
+  font-size: 12.5px;
+  background: var(--card-bg);
+  border: var(--field-border);
+  color: var(--field-color);
+}
+.accordion-body input { font-family: 'DM Mono', monospace; padding: 10px 12px; }
+
 .preview-note {
   border-radius: 10px;
   padding: 12px 14px;
