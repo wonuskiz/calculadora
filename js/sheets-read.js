@@ -1,20 +1,16 @@
 // ============================================================
 // Leitura pública (sem login) das taxas configuradas pela GOM.
-// Usa a exportação CSV da aba "Config" da planilha do Google Sheets.
+// Usa a exportação CSV de duas abas da planilha do Google Sheets.
 // Isso só funciona se a planilha estiver com o acesso "Qualquer
 // pessoa com o link pode ver" (mesmo nível que já é usado hoje).
 //
-// Estrutura da aba "Config" (uma linha por moeda):
-// moeda | taxa_gom_tipo | taxa_gom_valor | taxa_proxy_tipo | taxa_proxy_valor
-// JPY   | fixo          | 0              | fixo            | 0
-// KRW   | fixo          | 0              | fixo            | 0
-// ...
+// Aba "Config_Proxy" (uma linha por moeda):
+// moeda | limite | baixo_tipo | baixo_valor | alto_tipo | alto_valor
+//
+// Aba "Config_Gom" (uma linha por faixa/tipo de item):
+// tipo_item | qtd_min | qtd_max | valor
 // ============================================================
 
-/**
- * Faz o parse simples de uma linha CSV (sem vírgulas dentro de aspas complexas,
- * suficiente para o formato numérico/textual simples que usamos aqui).
- */
 function parseCsvLine(line) {
   const result = [];
   let cur = "";
@@ -34,55 +30,77 @@ function parseCsvLine(line) {
   return result;
 }
 
-function defaultRateEntry() {
-  return {
-    taxa_gom: { tipo: "fixo", valor: 0 },
-    taxa_proxy: { tipo: "fixo", valor: 0 },
-  };
+function csvUrlFor(sheetName) {
+  return `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 }
 
-/**
- * Busca as taxas configuradas por moeda na aba "Config".
- * Retorna um objeto { JPY: {taxa_gom, taxa_proxy}, KRW: {...}, ... }
- * com valores padrão (0, fixo) para qualquer moeda ainda não configurada,
- * para a calculadora nunca quebrar por causa disso.
- */
-async function fetchRatesConfig() {
-  const defaults = {};
-  CONFIG.MOEDAS.forEach((m) => { defaults[m] = defaultRateEntry(); });
+async function fetchCsvLines(sheetName) {
+  const res = await fetch(csvUrlFor(sheetName));
+  if (!res.ok) throw new Error(`Falha ao buscar ${sheetName}`);
+  const text = await res.text();
+  if (text.trim().startsWith("<")) throw new Error(`Aba ${sheetName} não encontrada ainda`);
+  return text.trim().split("\n").filter(Boolean);
+}
 
-  const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CONFIG.CONFIG_SHEET_NAME)}`;
-
+/** Busca a config de Proxy (por moeda). Cai nos padrões se a aba não existir. */
+async function fetchProxyConfig() {
+  const defaults = JSON.parse(JSON.stringify(CONFIG.DEFAULT_PROXY));
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("Falha ao buscar configuração");
-    const text = await res.text();
-
-    // Se a aba não existir, o Google devolve uma página de erro (não CSV).
-    if (text.trim().startsWith("<")) throw new Error("Aba Config não encontrada ainda");
-
-    const lines = text.trim().split("\n").filter(Boolean);
-    const rates = { ...defaults };
-
+    const lines = await fetchCsvLines(CONFIG.CONFIG_PROXY_SHEET);
+    const result = {};
     for (const line of lines) {
-      const [moeda, gomTipo, gomValor, proxyTipo, proxyValor] = parseCsvLine(line);
+      const [moeda, limite, baixoTipo, baixoValor, altoTipo, altoValor] = parseCsvLine(line);
       const key = (moeda || "").trim().toUpperCase();
-      if (!CONFIG.MOEDAS.includes(key)) continue; // pula o cabeçalho e linhas inválidas
+      if (!CONFIG.MOEDAS.includes(key)) continue;
 
-      rates[key] = {
-        taxa_gom: {
-          tipo: (gomTipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
-          valor: parseFloat((gomValor || "0").replace(",", ".")) || 0,
-        },
-        taxa_proxy: {
-          tipo: (proxyTipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
-          valor: parseFloat((proxyValor || "0").replace(",", ".")) || 0,
-        },
+      result[key] = {
+        limite: limite && limite.trim() !== "" ? parseFloat(limite.replace(",", ".")) : null,
+        baixoTipo: (baixoTipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
+        baixoValor: parseFloat((baixoValor || "0").replace(",", ".")) || 0,
+        altoTipo: (altoTipo || "fixo").trim().toLowerCase() === "percentual" ? "percentual" : "fixo",
+        altoValor: parseFloat((altoValor || "0").replace(",", ".")) || 0,
       };
     }
-    return rates;
+    // Preenche moedas que não vieram na planilha com os padrões.
+    CONFIG.MOEDAS.forEach((m) => { if (!result[m]) result[m] = defaults[m]; });
+    return result;
   } catch (err) {
-    console.warn("[calculadora] Usando taxas padrão (0) para todas as moedas:", err.message);
+    console.warn("[calculadora] Usando taxas de Proxy padrão:", err.message);
+    return defaults;
+  }
+}
+
+/** Busca a config da GOM (por tipo de item / faixa). Cai nos padrões se a aba não existir. */
+async function fetchGomConfig() {
+  const defaults = JSON.parse(JSON.stringify(CONFIG.DEFAULT_GOM));
+  try {
+    const lines = await fetchCsvLines(CONFIG.CONFIG_GOM_SHEET);
+    const result = {};
+    CONFIG.TIPOS_ITEM.forEach((t) => { result[t] = t === "Photocard" ? { faixas: [] } : { valor: 0 }; });
+
+    for (const line of lines) {
+      const [tipoItem, qtdMin, qtdMax, valor] = parseCsvLine(line);
+      const tipo = (tipoItem || "").trim();
+      if (!CONFIG.TIPOS_ITEM.includes(tipo)) continue;
+
+      const valorNum = parseFloat((valor || "0").replace(",", ".")) || 0;
+
+      if (tipo === "Photocard") {
+        const min = parseFloat(qtdMin) || 1;
+        const maxRaw = (qtdMax || "").trim();
+        const max = maxRaw === "" || maxRaw.toLowerCase() === "infinity" ? Infinity : parseFloat(maxRaw);
+        result.Photocard.faixas.push({ min, max, valor: valorNum });
+      } else {
+        result[tipo] = { valor: valorNum };
+      }
+    }
+
+    // Se a aba não trouxe faixas de Photocard (linhas ausentes), usa os padrões.
+    if (result.Photocard.faixas.length === 0) result.Photocard = defaults.Photocard;
+
+    return result;
+  } catch (err) {
+    console.warn("[calculadora] Usando taxas de GOM padrão:", err.message);
     return defaults;
   }
 }
