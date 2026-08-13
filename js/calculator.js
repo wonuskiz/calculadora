@@ -118,10 +118,13 @@ async function recalculate() {
   try {
     const rate = await getExchangeRate(moeda);
 
-    const totalOriginal = valor * quantidade;
+    // "valor" já é o VALOR TOTAL do pedido (não por item) — não multiplica pela quantidade aqui.
+    const totalOriginal = valor;
     const taxaProxyOriginal = calcTaxaProxyOriginal(totalOriginal, moeda);
     const valorConvertidoBRL = (totalOriginal + taxaProxyOriginal) * rate;
 
+    // A taxa da GOM é por item (e pode variar pela faixa de quantidade no Photocard),
+    // então aqui sim a quantidade multiplica.
     const taxaGomBRL = calcTaxaGomBRL(tipoItem, quantidade);
 
     const total = valorConvertidoBRL + taxaGomBRL;
