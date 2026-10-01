@@ -31,8 +31,10 @@ jobs:
             http_code=$(echo "$response" | tail -n1)
             body=$(echo "$response" | sed '$d')
 
+            declare -g "HTTP_${moeda}=${http_code}"
+            declare -g "BODY_${moeda}=$(echo "$body" | head -c 300 | tr '\n' ' ')"
+
             if [ "$http_code" != "200" ]; then
-              echo "::warning::Falha ao buscar ${moeda}. HTTP ${http_code}. Resposta: $(echo "$body" | head -c 200)" >&2
               echo ""
               return
             fi
@@ -47,14 +49,29 @@ jobs:
 
           echo "Valores obtidos -> JPY=$JPY KRW=$KRW CNY=$CNY USD=$USD"
 
-          # Se alguma moeda vier vazia, mantém o arquivo atual (não quebra a calculadora).
+          mkdir -p data
+
+          # Arquivo de diagnóstico: salvo SEMPRE, com ou sem sucesso, pra facilitar investigar falhas.
+          jq -n \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg jpy_code "$HTTP_JPY" --arg jpy_body "$BODY_JPY" --arg jpy_val "$JPY" \
+            --arg krw_code "$HTTP_KRW" --arg krw_body "$BODY_KRW" --arg krw_val "$KRW" \
+            --arg cny_code "$HTTP_CNY" --arg cny_body "$BODY_CNY" --arg cny_val "$CNY" \
+            --arg usd_code "$HTTP_USD" --arg usd_body "$BODY_USD" --arg usd_val "$USD" \
+            '{
+              last_run_at: $ts,
+              JPY: { http_code: $jpy_code, rate: $jpy_val, body_preview: $jpy_body },
+              KRW: { http_code: $krw_code, rate: $krw_val, body_preview: $krw_body },
+              CNY: { http_code: $cny_code, rate: $cny_val, body_preview: $cny_body },
+              USD: { http_code: $usd_code, rate: $usd_val, body_preview: $usd_body }
+            }' > data/debug-last-run.json
+
+          # Se alguma moeda vier vazia, mantém o rates.json atual (não quebra a calculadora).
           if [ -z "$JPY" ] || [ -z "$KRW" ] || [ -z "$CNY" ] || [ -z "$USD" ]; then
-            echo "::warning::Pelo menos uma cotação falhou. Mantendo o arquivo atual sem alterações."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Pelo menos uma cotação falhou. Veja data/debug-last-run.json para detalhes."
             exit 0
           fi
 
-          mkdir -p data
           jq -n \
             --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg jpy "$JPY" --arg krw "$KRW" --arg cny "$CNY" --arg usd "$USD" \
@@ -68,14 +85,11 @@ jobs:
               }
             }' > data/rates.json
 
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Commitar se houver mudança
-        if: steps.fetch.outputs.changed == 'true'
+      - name: Commitar mudanças
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/rates.json
-          git diff --cached --quiet && echo "Sem mudanças na cotação." && exit 0
+          git add data/rates.json data/debug-last-run.json
+          git diff --cached --quiet && echo "Sem mudanças para commitar." && exit 0
           git commit -m "Atualiza cotações ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
           git push
