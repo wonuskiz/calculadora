@@ -16,70 +16,48 @@ jobs:
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
-      - name: Buscar cotações (JPY, KRW, CNY, USD → BRL)
-        id: fetch
+      - name: Buscar cotações (Open Exchange Rates, base USD)
         run: |
-          fetch_rate() {
-            local moeda="$1"
-            local http_code body response rate
-
-            response=$(curl -sS --max-time 15 \
-              -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
-              -H "Accept: application/json" \
-              -w $'\n%{http_code}' \
-              "https://api.exchangerate.fun/latest?base=${moeda}")
-            http_code=$(echo "$response" | tail -n1)
-            body=$(echo "$response" | sed '$d')
-            rate=""
-            if [ "$http_code" = "200" ]; then
-              rate=$(echo "$body" | jq -r '.rates.BRL // empty' 2>/dev/null)
-            fi
-
-            # IMPORTANTE: usamos "declare -g" chamando a função diretamente (sem $(...)),
-            # porque command substitution roda em subshell e perderia essas variáveis.
-            declare -g "HTTP_${moeda}=${http_code}"
-            declare -g "BODY_${moeda}=$(echo "$body" | head -c 300 | tr '\n' ' ')"
-            declare -g "RATE_${moeda}=${rate}"
-          }
-
-          fetch_rate JPY
-          fetch_rate KRW
-          fetch_rate CNY
-          fetch_rate USD
-
-          JPY="$RATE_JPY"
-          KRW="$RATE_KRW"
-          CNY="$RATE_CNY"
-          USD="$RATE_USD"
-
-          echo "Valores obtidos -> JPY=$JPY KRW=$KRW CNY=$CNY USD=$USD"
+          # Plano gratuito da Open Exchange Rates só permite base=USD, então pedimos
+          # USD/BRL/JPY/KRW/CNY (tudo em relação a USD) numa única chamada, e depois
+          # calculamos a "ponte" pra BRL: taxa(X→BRL) = rates.BRL / rates.X
+          response=$(curl -sS --max-time 15 -w $'\n%{http_code}' \
+            "https://openexchangerates.org/api/latest.json?app_id=${OXR_APP_ID}&symbols=BRL,JPY,KRW,CNY,USD")
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          body_preview=$(echo "$body" | head -c 300 | tr '\n' ' ')
 
           mkdir -p data
 
-          # Arquivo de diagnóstico: salvo SEMPRE, com ou sem sucesso, pra facilitar investigar falhas.
-          jq -n \
-            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg jpy_code "$HTTP_JPY" --arg jpy_body "$BODY_JPY" --arg jpy_val "$JPY" \
-            --arg krw_code "$HTTP_KRW" --arg krw_body "$BODY_KRW" --arg krw_val "$KRW" \
-            --arg cny_code "$HTTP_CNY" --arg cny_body "$BODY_CNY" --arg cny_val "$CNY" \
-            --arg usd_code "$HTTP_USD" --arg usd_body "$BODY_USD" --arg usd_val "$USD" \
-            '{
-              last_run_at: $ts,
-              JPY: { http_code: $jpy_code, rate: $jpy_val, body_preview: $jpy_body },
-              KRW: { http_code: $krw_code, rate: $krw_val, body_preview: $krw_body },
-              CNY: { http_code: $cny_code, rate: $cny_val, body_preview: $cny_body },
-              USD: { http_code: $usd_code, rate: $usd_val, body_preview: $usd_body }
-            }' > data/debug-last-run.json
-
-          # Se alguma moeda vier vazia, mantém o rates.json atual (não quebra a calculadora).
-          if [ -z "$JPY" ] || [ -z "$KRW" ] || [ -z "$CNY" ] || [ -z "$USD" ]; then
-            echo "::warning::Pelo menos uma cotação falhou. Veja data/debug-last-run.json para detalhes."
+          if [ "$http_code" != "200" ]; then
+            jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg code "$http_code" --arg body "$body_preview" \
+              '{ last_run_at: $ts, success: false, http_code: $code, body_preview: $body }' > data/debug-last-run.json
+            echo "::warning::Falha ao buscar cotações. HTTP ${http_code}. Veja data/debug-last-run.json."
             exit 0
           fi
 
+          BRL=$(echo "$body" | jq -r '.rates.BRL // empty')
+          JPY=$(echo "$body" | jq -r '.rates.JPY // empty')
+          KRW=$(echo "$body" | jq -r '.rates.KRW // empty')
+          CNY=$(echo "$body" | jq -r '.rates.CNY // empty')
+          USD=$(echo "$body" | jq -r '.rates.USD // empty')
+
+          if [ -z "$BRL" ] || [ -z "$JPY" ] || [ -z "$KRW" ] || [ -z "$CNY" ] || [ -z "$USD" ]; then
+            jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg body "$body_preview" \
+              '{ last_run_at: $ts, success: false, http_code: "200", note: "resposta sem os campos esperados", body_preview: $body }' > data/debug-last-run.json
+            echo "::warning::Resposta da API veio incompleta. Veja data/debug-last-run.json."
+            exit 0
+          fi
+
+          # Cross-rate: quanto vale 1 unidade de cada moeda, em reais.
+          RATE_JPY=$(echo "$BRL $JPY" | awk '{ printf "%.8f", $1 / $2 }')
+          RATE_KRW=$(echo "$BRL $KRW" | awk '{ printf "%.8f", $1 / $2 }')
+          RATE_CNY=$(echo "$BRL $CNY" | awk '{ printf "%.8f", $1 / $2 }')
+          RATE_USD=$(echo "$BRL $USD" | awk '{ printf "%.8f", $1 / $2 }')
+
           jq -n \
             --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg jpy "$JPY" --arg krw "$KRW" --arg cny "$CNY" --arg usd "$USD" \
+            --arg jpy "$RATE_JPY" --arg krw "$RATE_KRW" --arg cny "$RATE_CNY" --arg usd "$RATE_USD" \
             '{
               updated_at: $updated_at,
               rates: {
@@ -89,6 +67,13 @@ jobs:
                 USD: ($usd | tonumber)
               }
             }' > data/rates.json
+
+          jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ last_run_at: $ts, success: true }' > data/debug-last-run.json
+
+          echo "Cotações atualizadas -> JPY=$RATE_JPY KRW=$RATE_KRW CNY=$RATE_CNY USD=$RATE_USD"
+        env:
+          OXR_APP_ID: ${{ secrets.OXR_APP_ID }}
 
       - name: Commitar mudanças
         run: |
