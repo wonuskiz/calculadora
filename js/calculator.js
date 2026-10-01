@@ -47,28 +47,40 @@ function hideError() {
   els.errorBanner.classList.remove("show");
 }
 
+let localRatesPromise = null;
+
+/** Carrega (uma vez por sessão) o arquivo data/rates.json, atualizado de hora em hora
+ * por uma GitHub Action. Como é servido pelo próprio site, não tem limitação de CORS. */
+async function loadLocalRates() {
+  if (localRatesPromise) return localRatesPromise;
+
+  localRatesPromise = (async () => {
+    try {
+      const res = await fetch(`data/rates.json?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("data/rates.json indisponível");
+      const data = await res.json();
+      return data?.rates || null;
+    } catch (err) {
+      console.warn("[calculadora] Não foi possível carregar data/rates.json, usando Frankfurter:", err.message);
+      return null;
+    }
+  })();
+
+  return localRatesPromise;
+}
+
 async function getExchangeRate(moeda) {
   if (exchangeCache[moeda] !== undefined) return exchangeCache[moeda];
 
-  // Fonte principal: exchangerate.fun — gratuita, sem chave, atualizada de hora em hora.
-  try {
-    const url = `https://api.exchangerate.fun/latest?base=${moeda}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      const rate = data?.rates?.BRL;
-      if (rate) {
-        exchangeCache[moeda] = rate;
-        return rate;
-      }
-    }
-  } catch (err) {
-    console.warn("[calculadora] Fonte principal de câmbio falhou, tentando backup:", err.message);
+  const localRates = await loadLocalRates();
+  if (localRates && localRates[moeda]) {
+    exchangeCache[moeda] = localRates[moeda];
+    return localRates[moeda];
   }
 
-  // Backup: Frankfurter (atualiza só 1x por dia útil, mas é bem estável).
-  const fallbackUrl = `https://api.frankfurter.dev/v1/latest?base=${moeda}&symbols=BRL`;
-  const res = await fetch(fallbackUrl);
+  // Fallback: Frankfurter (atualiza 1x por dia útil, mas sempre acessível via navegador).
+  const url = `https://api.frankfurter.dev/v1/latest?base=${moeda}&symbols=BRL`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Não conseguimos buscar a cotação agora. Tente novamente em instantes.");
   const data = await res.json();
   const rate = data?.rates?.BRL;
