@@ -10,6 +10,7 @@ const CONFIG = {
   // Nomes das abas de configuração (novas, não mexem nas abas originais da planilha).
   CONFIG_PROXY_SHEET: "Config_Proxy",
   CONFIG_GOM_SHEET: "Config_Gom",
+  CONFIG_WISE_SHEET: "Config_Wise",
 
   // Client ID do Google OAuth (mesmo usado no wonuskiz-mail).
   GOOGLE_CLIENT_ID: "342854763708-1ht7gkhjjm61s28uhba1cecub35qkak4.apps.googleusercontent.com",
@@ -40,11 +41,15 @@ const CONFIG = {
   // "limite": acima desse valor, usa a taxa "alta"; até ele, usa a "baixa".
   // Se "limite" for null, não há faixa — sempre usa a taxa "baixa".
   DEFAULT_PROXY: {
-    JPY: { limite: 6000, baixoTipo: "fixo", baixoValor: 300, altoTipo: "percentual", altoValor: 5 },
+    JPY: { limite: 6000, baixoTipo: "fixo", baixoValor: 400, altoTipo: "percentual", altoValor: 5 },
     CNY: { limite: 125, baixoTipo: "fixo", baixoValor: 10, altoTipo: "percentual", altoValor: 8 },
     KRW: { limite: null, baixoTipo: "fixo", baixoValor: 3000, altoTipo: "fixo", altoValor: 3000 },
     USD: { limite: null, baixoTipo: "fixo", baixoValor: 1, altoTipo: "fixo", altoValor: 1 },
   },
+
+  // Taxa Wise (já inclui IOF): um único percentual, igual para todas as moedas.
+  // Aplicada sobre o valor JÁ CONVERTIDO em reais (depois da taxa Proxy).
+  DEFAULT_TAXA_WISE: 3.9,
 
   // Taxa da GOM: sempre em reais (R$), valor fixo por item.
   // Photocard varia pela quantidade (faixas); os demais tipos são fixos.
