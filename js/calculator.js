@@ -135,12 +135,13 @@ async function recalculate() {
   hideError();
 
   const valor = parseFloat((els.valor.value || "").replace(",", "."));
-  const quantidade = parseFloat(els.quantidade.value || "1") || 1;
+  const quantidadeRaw = (els.quantidade.value || "").trim();
+  const quantidade = parseFloat(quantidadeRaw);
   const moeda = els.moeda.value;
   const tipoItem = els.tipo.value;
   const frete = moeda === "USD" ? parseFloat((els.frete.value || "0").replace(",", ".")) || 0 : 0;
 
-  if (!valor || valor <= 0 || !moeda || !tipoItem) {
+  if (!valor || valor <= 0 || !moeda || !tipoItem || !quantidadeRaw || !quantidade || quantidade <= 0) {
     setEmptyState();
     return;
   }
@@ -193,4 +194,5 @@ async function init() {
 }
 
 init();
+
 
