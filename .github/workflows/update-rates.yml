@@ -21,7 +21,7 @@ jobs:
         run: |
           fetch_rate() {
             local moeda="$1"
-            local http_code body response
+            local http_code body response rate
 
             response=$(curl -sS --max-time 15 \
               -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
@@ -30,22 +30,27 @@ jobs:
               "https://api.exchangerate.fun/latest?base=${moeda}")
             http_code=$(echo "$response" | tail -n1)
             body=$(echo "$response" | sed '$d')
-
-            declare -g "HTTP_${moeda}=${http_code}"
-            declare -g "BODY_${moeda}=$(echo "$body" | head -c 300 | tr '\n' ' ')"
-
-            if [ "$http_code" != "200" ]; then
-              echo ""
-              return
+            rate=""
+            if [ "$http_code" = "200" ]; then
+              rate=$(echo "$body" | jq -r '.rates.BRL // empty' 2>/dev/null)
             fi
 
-            echo "$body" | jq -r '.rates.BRL // empty' 2>/dev/null
+            # IMPORTANTE: usamos "declare -g" chamando a função diretamente (sem $(...)),
+            # porque command substitution roda em subshell e perderia essas variáveis.
+            declare -g "HTTP_${moeda}=${http_code}"
+            declare -g "BODY_${moeda}=$(echo "$body" | head -c 300 | tr '\n' ' ')"
+            declare -g "RATE_${moeda}=${rate}"
           }
 
-          JPY=$(fetch_rate JPY)
-          KRW=$(fetch_rate KRW)
-          CNY=$(fetch_rate CNY)
-          USD=$(fetch_rate USD)
+          fetch_rate JPY
+          fetch_rate KRW
+          fetch_rate CNY
+          fetch_rate USD
+
+          JPY="$RATE_JPY"
+          KRW="$RATE_KRW"
+          CNY="$RATE_CNY"
+          USD="$RATE_USD"
 
           echo "Valores obtidos -> JPY=$JPY KRW=$KRW CNY=$CNY USD=$USD"
 
