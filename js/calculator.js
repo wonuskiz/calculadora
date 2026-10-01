@@ -7,6 +7,8 @@ const els = {
   tipo: document.getElementById("tipoItem"),
   quantidade: document.getElementById("quantidade"),
   moeda: document.getElementById("moeda"),
+  frete: document.getElementById("frete"),
+  freteBlock: document.getElementById("freteBlock"),
   totalBox: document.getElementById("totalBox"),
   totalValue: document.getElementById("totalValue"),
   errorBanner: document.getElementById("errorBanner"),
@@ -101,6 +103,12 @@ function setFilledState(total) {
   els.totalValue.textContent = formatBRL(total);
 }
 
+function updateFreteVisibility() {
+  const isUSD = els.moeda.value === "USD";
+  els.freteBlock.style.display = isUSD ? "block" : "none";
+  if (!isUSD) els.frete.value = "";
+}
+
 async function recalculate() {
   hideError();
 
@@ -108,6 +116,7 @@ async function recalculate() {
   const quantidade = parseFloat(els.quantidade.value || "1") || 1;
   const moeda = els.moeda.value;
   const tipoItem = els.tipo.value;
+  const frete = moeda === "USD" ? parseFloat((els.frete.value || "0").replace(",", ".")) || 0 : 0;
 
   if (!valor || valor <= 0 || !moeda || !tipoItem) {
     setEmptyState();
@@ -120,9 +129,12 @@ async function recalculate() {
     const rate = await getExchangeRate(moeda);
 
     // "valor" já é o VALOR TOTAL do pedido (não por item) — não multiplica pela quantidade aqui.
-    const totalOriginal = valor;
-    const taxaProxyOriginal = calcTaxaProxyOriginal(totalOriginal, moeda);
-    const valorConvertidoBRL = (totalOriginal + taxaProxyOriginal) * rate;
+    // A taxa Proxy é calculada SEM o frete (frete não entra na faixa nem no cálculo do proxy).
+    const taxaProxyOriginal = calcTaxaProxyOriginal(valor, moeda);
+
+    // Frete entra depois do proxy, mas antes da conversão — então sofre a taxa Wise, mas não a do Proxy.
+    const totalParaConverter = valor + taxaProxyOriginal + frete;
+    const valorConvertidoBRL = totalParaConverter * rate;
 
     // Taxa Wise (já inclui IOF), aplicada sobre o valor já convertido em reais.
     const taxaWiseBRL = valorConvertidoBRL * ((taxaWise || 0) / 100);
@@ -150,7 +162,9 @@ async function init() {
   setupLinks();
 
   [els.valor, els.quantidade].forEach((el) => el.addEventListener("input", debouncedRecalculate));
+  els.frete.addEventListener("input", debouncedRecalculate);
   [els.tipo, els.moeda].forEach((el) => el.addEventListener("change", debouncedRecalculate));
+  els.moeda.addEventListener("change", updateFreteVisibility);
 
   [proxyConfig, gomConfig, taxaWise] = await Promise.all([fetchProxyConfig(), fetchGomConfig(), fetchTaxaWise()]);
   recalculate();
