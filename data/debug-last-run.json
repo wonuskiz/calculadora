@@ -1,23 +1,23 @@
 {
-  "last_run_at": "2026-10-01T13:01:50Z",
+  "last_run_at": "2026-10-01T13:04:08Z",
   "JPY": {
-    "http_code": "",
+    "http_code": "403",
     "rate": "",
-    "body_preview": ""
+    "body_preview": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal"
   },
   "KRW": {
-    "http_code": "",
+    "http_code": "403",
     "rate": "",
-    "body_preview": ""
+    "body_preview": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal"
   },
   "CNY": {
-    "http_code": "",
+    "http_code": "403",
     "rate": "",
-    "body_preview": ""
+    "body_preview": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal"
   },
   "USD": {
-    "http_code": "",
+    "http_code": "403",
     "rate": "",
-    "body_preview": ""
+    "body_preview": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scal"
   }
 }
