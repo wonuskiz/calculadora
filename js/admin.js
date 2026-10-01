@@ -21,6 +21,7 @@ const adminEls = {
   saveMsg: document.getElementById("saveMsg"),
   accordionProxy: document.getElementById("accordionProxy"),
   accordionGom: document.getElementById("accordionGom"),
+  taxaWiseInput: document.getElementById("taxaWiseInput"),
 };
 
 let accessToken = null;
@@ -29,6 +30,7 @@ let openProxyCurrency = CONFIG.MOEDAS[0];
 let openGomTipo = CONFIG.TIPOS_ITEM[0];
 let proxyState = {}; // { JPY: {limite, baixoTipo, baixoValor, altoTipo, altoValor}, ... }
 let gomState = {}; // { Photocard: {faixas: [...]}, Album: {valor}, ... }
+let taxaWiseState = 0; // número (%)
 
 function showState(state) {
   adminEls.loginState.style.display = state === "login" ? "block" : "none";
@@ -218,11 +220,13 @@ function renderGomAccordion() {
 // ------------------------------------------------------------
 
 async function loadCurrentConfig() {
-  const [proxy, gom] = await Promise.all([fetchProxyConfig(), fetchGomConfig()]);
+  const [proxy, gom, wise] = await Promise.all([fetchProxyConfig(), fetchGomConfig(), fetchTaxaWise()]);
   proxyState = proxy;
   gomState = gom;
+  taxaWiseState = wise;
   renderProxyAccordion();
   renderGomAccordion();
+  adminEls.taxaWiseInput.value = taxaWiseState;
 }
 
 // ------------------------------------------------------------
@@ -346,6 +350,10 @@ async function saveAll() {
       }
     });
     await writeValues(CONFIG.CONFIG_GOM_SHEET, `A1:D${gomValues.length}`, gomValues);
+
+    // --- Taxa Wise ---
+    const wiseValue = parseFloat(adminEls.taxaWiseInput.value) || 0;
+    await writeValues(CONFIG.CONFIG_WISE_SHEET, "A1:A2", [["taxa_wise"], [wiseValue]]);
 
     adminEls.saveMsg.textContent = "✅ taxas salvas com sucesso!";
     adminEls.saveMsg.className = "save-msg ok";
