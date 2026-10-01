@@ -104,3 +104,21 @@ async function fetchGomConfig() {
     return defaults;
   }
 }
+
+/** Busca a Taxa Wise (percentual único, aplicado sobre o valor já convertido). */
+async function fetchTaxaWise() {
+  const defaultValue = CONFIG.DEFAULT_TAXA_WISE;
+  try {
+    const lines = await fetchCsvLines(CONFIG.CONFIG_WISE_SHEET);
+    // Formato: linha 1 = cabeçalho "taxa_wise", linha 2 = valor (ex: 3.9)
+    for (const line of lines) {
+      const [valor] = parseCsvLine(line);
+      const parsed = parseFloat((valor || "").replace(",", "."));
+      if (!isNaN(parsed) && valor.trim().toLowerCase() !== "taxa_wise") return parsed;
+    }
+    return defaultValue;
+  } catch (err) {
+    console.warn("[calculadora] Usando Taxa Wise padrão:", err.message);
+    return defaultValue;
+  }
+}
