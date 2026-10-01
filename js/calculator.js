@@ -56,8 +56,15 @@ async function loadLocalRates() {
 
   localRatesPromise = (async () => {
     try {
-      const res = await fetch(`data/rates.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("data/rates.json indisponível");
+      // Resolve o caminho a partir da pasta atual, não importa se a URL
+      // termina com "/" ou não (evita resolver pro diretório errado).
+      const basePath = window.location.pathname.endsWith("/")
+        ? window.location.pathname
+        : window.location.pathname.replace(/[^/]*$/, "");
+      const url = `${basePath}data/rates.json?t=${Date.now()}`;
+
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`data/rates.json indisponível (HTTP ${res.status}) em ${url}`);
       const data = await res.json();
       return data?.rates || null;
     } catch (err) {
@@ -201,3 +208,4 @@ async function init() {
 }
 
 init();
+
