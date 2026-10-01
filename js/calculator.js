@@ -55,22 +55,16 @@ async function loadLocalRates() {
   if (localRatesPromise) return localRatesPromise;
 
   localRatesPromise = (async () => {
-    try {
-      // Resolve o caminho a partir da pasta atual, não importa se a URL
-      // termina com "/" ou não (evita resolver pro diretório errado).
-      const basePath = window.location.pathname.endsWith("/")
-        ? window.location.pathname
-        : window.location.pathname.replace(/[^/]*$/, "");
-      const url = `${basePath}data/rates.json?t=${Date.now()}`;
+    const basePath = window.location.pathname.endsWith("/")
+      ? window.location.pathname
+      : window.location.pathname.replace(/[^/]*$/, "");
+    const url = `${basePath}data/rates.json?t=${Date.now()}`;
 
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error(`data/rates.json indisponível (HTTP ${res.status}) em ${url}`);
-      const data = await res.json();
-      return data?.rates || null;
-    } catch (err) {
-      console.warn("[calculadora] Não foi possível carregar data/rates.json, usando Frankfurter:", err.message);
-      return null;
-    }
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Não conseguimos carregar a cotação (HTTP ${res.status}).`);
+    const data = await res.json();
+    if (!data?.rates) throw new Error("Arquivo de cotação veio sem os dados esperados.");
+    return data.rates;
   })();
 
   return localRatesPromise;
@@ -80,18 +74,9 @@ async function getExchangeRate(moeda) {
   if (exchangeCache[moeda] !== undefined) return exchangeCache[moeda];
 
   const localRates = await loadLocalRates();
-  if (localRates && localRates[moeda]) {
-    exchangeCache[moeda] = localRates[moeda];
-    return localRates[moeda];
-  }
+  const rate = localRates?.[moeda];
+  if (!rate) throw new Error(`Cotação indisponível para ${moeda} no momento. Tente novamente em instantes.`);
 
-  // Fallback: Frankfurter (atualiza 1x por dia útil, mas sempre acessível via navegador).
-  const url = `https://api.frankfurter.dev/v1/latest?base=${moeda}&symbols=BRL`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Não conseguimos buscar a cotação agora. Tente novamente em instantes.");
-  const data = await res.json();
-  const rate = data?.rates?.BRL;
-  if (!rate) throw new Error("Cotação indisponível para essa moeda no momento.");
   exchangeCache[moeda] = rate;
   return rate;
 }
