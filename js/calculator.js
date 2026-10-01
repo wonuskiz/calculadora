@@ -16,6 +16,7 @@ const els = {
 
 let proxyConfig = null; // { JPY: {limite, baixoTipo, baixoValor, altoTipo, altoValor}, ... }
 let gomConfig = null; // { Photocard: {faixas: [...]}, Album: {valor}, ... }
+let taxaWise = null; // número (%), ex: 3.9
 let exchangeCache = {}; // { JPY: rateToBRL, ... }
 let debounceTimer = null;
 
@@ -123,11 +124,14 @@ async function recalculate() {
     const taxaProxyOriginal = calcTaxaProxyOriginal(totalOriginal, moeda);
     const valorConvertidoBRL = (totalOriginal + taxaProxyOriginal) * rate;
 
+    // Taxa Wise (já inclui IOF), aplicada sobre o valor já convertido em reais.
+    const taxaWiseBRL = valorConvertidoBRL * ((taxaWise || 0) / 100);
+
     // A taxa da GOM é por item (e pode variar pela faixa de quantidade no Photocard),
     // então aqui sim a quantidade multiplica.
     const taxaGomBRL = calcTaxaGomBRL(tipoItem, quantidade);
 
-    const total = valorConvertidoBRL + taxaGomBRL;
+    const total = valorConvertidoBRL + taxaWiseBRL + taxaGomBRL;
 
     setFilledState(total);
   } catch (err) {
@@ -148,7 +152,7 @@ async function init() {
   [els.valor, els.quantidade].forEach((el) => el.addEventListener("input", debouncedRecalculate));
   [els.tipo, els.moeda].forEach((el) => el.addEventListener("change", debouncedRecalculate));
 
-  [proxyConfig, gomConfig] = await Promise.all([fetchProxyConfig(), fetchGomConfig()]);
+  [proxyConfig, gomConfig, taxaWise] = await Promise.all([fetchProxyConfig(), fetchGomConfig(), fetchTaxaWise()]);
   recalculate();
 }
 
