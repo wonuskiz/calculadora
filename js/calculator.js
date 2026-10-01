@@ -49,8 +49,26 @@ function hideError() {
 
 async function getExchangeRate(moeda) {
   if (exchangeCache[moeda] !== undefined) return exchangeCache[moeda];
-  const url = `https://api.frankfurter.dev/v1/latest?base=${moeda}&symbols=BRL`;
-  const res = await fetch(url);
+
+  // Fonte principal: exchangerate.fun — gratuita, sem chave, atualizada de hora em hora.
+  try {
+    const url = `https://api.exchangerate.fun/latest?base=${moeda}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const rate = data?.rates?.BRL;
+      if (rate) {
+        exchangeCache[moeda] = rate;
+        return rate;
+      }
+    }
+  } catch (err) {
+    console.warn("[calculadora] Fonte principal de câmbio falhou, tentando backup:", err.message);
+  }
+
+  // Backup: Frankfurter (atualiza só 1x por dia útil, mas é bem estável).
+  const fallbackUrl = `https://api.frankfurter.dev/v1/latest?base=${moeda}&symbols=BRL`;
+  const res = await fetch(fallbackUrl);
   if (!res.ok) throw new Error("Não conseguimos buscar a cotação agora. Tente novamente em instantes.");
   const data = await res.json();
   const rate = data?.rates?.BRL;
