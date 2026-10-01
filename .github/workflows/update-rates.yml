@@ -1,0 +1,66 @@
+name: Atualizar cotações
+
+on:
+  schedule:
+    # Roda a cada hora, no minuto 5 (evita o "rush" do minuto 0 nos servidores do GitHub)
+    - cron: "5 * * * *"
+  workflow_dispatch: {} # permite rodar manualmente pela aba "Actions"
+
+permissions:
+  contents: write
+
+jobs:
+  update-rates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Buscar cotações (JPY, KRW, CNY, USD → BRL)
+        id: fetch
+        run: |
+          set -e
+          fetch_rate() {
+            local moeda="$1"
+            curl -s --max-time 10 "https://api.exchangerate.fun/latest?base=${moeda}" \
+              | jq -r '.rates.BRL // empty'
+          }
+
+          JPY=$(fetch_rate JPY)
+          KRW=$(fetch_rate KRW)
+          CNY=$(fetch_rate CNY)
+          USD=$(fetch_rate USD)
+
+          # Se alguma moeda vier vazia, aborta sem sobrescrever o arquivo (mantém o último valor bom).
+          for v in "$JPY" "$KRW" "$CNY" "$USD"; do
+            if [ -z "$v" ]; then
+              echo "⚠️ Falha ao buscar uma das cotações. Mantendo o arquivo atual."
+              exit 0
+            fi
+          done
+
+          mkdir -p data
+          jq -n \
+            --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg jpy "$JPY" --arg krw "$KRW" --arg cny "$CNY" --arg usd "$USD" \
+            '{
+              updated_at: $updated_at,
+              rates: {
+                JPY: ($jpy | tonumber),
+                KRW: ($krw | tonumber),
+                CNY: ($cny | tonumber),
+                USD: ($usd | tonumber)
+              }
+            }' > data/rates.json
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commitar se houver mudança
+        if: steps.fetch.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/rates.json
+          git diff --cached --quiet && echo "Sem mudanças na cotação." && exit 0
+          git commit -m "Atualiza cotações ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push
